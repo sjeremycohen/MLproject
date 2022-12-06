@@ -1,0 +1,131 @@
+---
+title: "Machine Learning HW1 - Classification"
+output: html_document
+date: "2022-12-05"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Changes Since EDA
+
+In the EDA of the [NYPD Historical Complaint Data](https://data.cityofnewyork.us/Public-Safety/NYPD-Complaint-Data-Historic/qgea-i56i),I made the decision to limit my dataset to only records from 2020 and 2021. I have since trimmed this dataset even further, to only data in the second half of 2021. The runtimes for almost everything in the dataset were taking far too long as is. This trims the dataset from 860k rows to a much more processable 244307.
+
+In light of this I have also dropped the RPT_DT- my hope was to use this field to see if cyclical crime was observable in our model, perhaps dividing the date into months. Given that we no longer have a full year’s worth of data, the dataset is complicated enough as is, and many of the ML models have issues with date data.
+
+During EDA we dropped a number of location fields. Of these, latitude and longitude were included, passed up in favor of the precinct code. While I still believe Precinct code would be a better metric, I have reversed this decision to use Lat and Long instead. This is because One-Hot encoding turned address pct code into 71 fields, comprising over ⅓ of the fields in our dataset. This was incredibly burdensome for calculations.
+
+Now I’m going to use this part to vent. If I had known how overly complicated  using large amounts of categorical data would make this project, I would never have picked this data set. My results below will be terrible. I wish I could go back to the drawing board. It’s too late for that. Please tell future students to select numeric data sets because this was a nightmare.
+
+Get ready for paragraphs and paragraphs about how my models tell us nothing about the data, because they don’t. But I can’t turn back at this point and I need to pass this class to graduate this semester. Let’s begin.
+
+## Load the Data
+We're going to start by loading the data as processed at the end of EDA. This will be significantly faster than reloading the 2.5GB csv and grooming it every time.
+
+```{r Load Data}
+cdata <- read.csv("cdata.csv")
+cdata <- subset(cdata, select = -c(X))
+length(cdata)
+```
+
+
+### So Wait, What Are We Testing For Again?
+
+I’m so glad you asked. During EDA, we compressed a field, LAW_CAT_CD, which had 3 classes of crime, FELONY, MISDEMEANOR, VIOLATION into a binary categorization called FELONY, 1 if a felony, 0 if not. Essentially, we want to see if we can predict whether a crime will be a felony based on location, premise, and demographic data.
+
+## GLM
+
+Because all the different models have different computational demands, we will use different Test-Train splits for all of our models. For GLM, we will use 70%/30% Train/Test
+
+```{r GLM TT-Split}
+set.seed(777)
+train_pct = .7
+split <- sample(c(TRUE, FALSE), nrow(cdata), replace=TRUE, prob=c(train_pct,(1-train_pct)))
+
+cdTrain <- cdata[split,]
+cdTest <- cdata[!split,]
+nrow(cdTrain)
+nrow(cdTest)
+```
+
+We’ll set up our GLM model using the following code (adapted from [here](https://www.digitalocean.com/community/tutorials/plot-roc-curve-r-programming)) to process our training data. First let’s set up our custom error metric function to print all the required metrics. We can use this for all our models!
+
+```{r Error Metrics}
+err_metric=function(CM)
+{
+  TN =CM[1,1]
+  TP =CM[2,2]
+  FP =CM[1,2]
+  FN =CM[2,1]
+  precision =(TP)/(TP+FP)
+  specificity_score = (TN) / (TN + FP)
+  recall_score =(FP)/(FP+TN)
+  f1_score=2*((precision*recall_score)/(precision+recall_score))
+  accuracy_model  =(TP+TN)/(TP+TN+FP+FN)
+  False_positive_rate =(FP)/(FP+TN)
+  False_negative_rate =(FN)/(FN+TP)
+  print(paste("Accuracy of the model: ",round(accuracy_model,2)))
+  print(paste("Specificity value of the model: ",round(specificity_score,2)))
+  print(paste("Precision value of the model: ",round(precision,2)))
+  print(paste("Recall/Sensitivity value of the model: ",round(recall_score,2)))
+}
+```
+
+Next let’s build our model, confusion matrix, and get the error stats
+```{r GLM}
+logit_m =glm(FELONY ~ . ,data =cdTrain ,family='binomial')
+# 124 is the index of FELONY column
+logit_P = predict(logit_m , newdata = cdTest[-124] ,type = 'response' ) 
+logit_P <- ifelse(logit_P > 0.5,1,0) # Probability check
+CM= table(cdTest[,124] , logit_P)
+print(CM)
+err_metric(CM)
+```
+
+Our GLM model seems to do a good job categorizing true negatives as negative with a specificity of 93%, clearly reflected in the first row of our confusion matrix. However the Sensitivity of the model is extremely poor at only 7%. Taken together, this says to me that the GLM model is overly aggressive in classifying complaints as non-felonies. The ROC and AUC curves should validate or disprove my assumption.
+
+```{r GLM ROCAUC}
+library(pROC)
+roc_score=roc(cdTest[,13], logit_P) #AUC score
+plot(roc_score ,main ="ROC curve -- Logistic Regression ")
+print(roc_score$auc)
+```
+
+Our ROC curve reveals that our model has almost no predictive value, almost a dead fit for the diagonal- verifying my earlier suspicion with a miserable AUC of 52%
+
+On to some other models!
+
+## SVM
+
+SVM is an incredibly compute-demanding model. Instead of running it on the same training set we used in GLM, we will run it on a much smaller subset of 5% of the data.
+
+```{r SVM TestTrain}
+set.seed(777)
+train_pct = .05
+split <- sample(c(TRUE, FALSE), nrow(cdata), replace=TRUE, prob=c(train_pct,(1-train_pct)))
+
+cdTrain <- cdata[split,]
+cdTest <- cdata[!split,]
+nrow(cdTrain)
+nrow(cdTest)
+```
+
+We'll be able to reuse our `err_metric()` function from GLM here, as the data is processed the exact same way. 
+```{r SVM}
+library(e1071)
+svm_m = svm(FELONY ~ . ,data =cdTrain ,probability=TRUE, kernel = "linear")
+svm_P = predict(svm_m , newdata = cdTest[-124] ,type = 'response' )
+svm_P <- ifelse(svm_P > 0.5,1,0) # Probability check
+CM= table(cdTest[,124] , svm_P)
+print(CM)
+err_metric(CM)
+```
+
+
+```{r SVM ROCAUC}
+library(pROC)
+roc_score=roc(cdTest[,13], svm_P) #AUC score
+plot(roc_score ,main ="ROC curve -- Logistic Regression ")
+print(roc_score$auc)
+```
