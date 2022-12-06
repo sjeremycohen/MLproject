@@ -14,7 +14,16 @@ In the EDA of the [NYPD Historical Complaint Data](https://data.cityofnewyork.us
 
 In light of this I have also dropped the RPT_DT- my hope was to use this field to see if cyclical crime was observable in our model, perhaps dividing the date into months. Given that we no longer have a full year’s worth of data, the dataset is complicated enough as is, and many of the ML models have issues with date data.
 
-During EDA we dropped a number of location fields. Of these, latitude and longitude were included, passed up in favor of the precinct code. While I still believe Precinct code would be a better metric, I have reversed this decision to use Lat and Long instead. This is because One-Hot encoding turned address pct code into 71 fields, comprising over 1/3 of the fields in our dataset. This was incredibly burdensome for calculations.
+During EDA we dropped a number of location fields. Of these, latitude and longitude were included, passed up in favor of the precinct code. While I still believe Precinct code would be a better metric, I have reversed this decision to use Lat and Long instead. This is because One-Hot encoding turned address pct code into 71 fields, comprising over ⅓ of the fields in our dataset. This was incredibly burdensome for calculations.
+
+The last, and perhaps most impactful thing we're going to do here is use the `nearZeroVar` function to identify rows in our dataset with nearly zero variance, and remove them. Hopefully this will improve the predictive power of our model, as previous iterations of this assignment were quite poor performing.
+
+```{r Trim Near Zero Variance}
+library(caret)
+cdata <- cdata[,-nearZeroVar(cdata)]
+```
+
+Wow. 100 columns gone. Let's proceed
 
 Now I’m going to use this part to vent. If I had known how overly complicated  using large amounts of categorical data would make this project, I would never have picked this data set. My results below will be terrible. I wish I could go back to the drawing board. It’s too late for that. Please tell future students to select numeric data sets because this was a nightmare.
 
@@ -26,6 +35,7 @@ We're going to start by loading the data as processed at the end of EDA. This wi
 ```{r Load Data}
 cdata <- read.csv("cdata.csv")
 cdata <- subset(cdata, select = -c(X))
+cdata <- cdata[,-nearZeroVar(cdata)]
 length(cdata)
 ```
 
@@ -55,14 +65,21 @@ We’ll set up our GLM model using the following code (adapted from [here](https
 err_metric=function(CM)
 {
   TN =CM[1,1]
-  TP =CM[2,2]
-  FP =CM[1,2]
   FN =CM[2,1]
+  if (ncol(CM) == 1) {
+    FP = 0
+    TP = 0
+  }
+  else {
+    FP =CM[1,2]
+    TP =CM[2,2]
+  }
   precision =(TP)/(TP+FP)
   specificity_score = (TN) / (TN + FP)
   recall_score =(FP)/(FP+TN)
   f1_score=2*((precision*recall_score)/(precision+recall_score))
   accuracy_model  =(TP+TN)/(TP+TN+FP+FN)
+  
   False_positive_rate =(FP)/(FP+TN)
   False_negative_rate =(FN)/(FN+TP)
   print(paste("Accuracy of the model: ",round(accuracy_model,2)))
@@ -96,11 +113,11 @@ Our ROC curve reveals that our model has almost no predictive value, almost a de
 
 ## SVM
 
-SVM is an incredibly compute-demanding model. Instead of running it on the same training set we used in GLM, we will run it on a much smaller subset of 5% of the data.
+SVM is an incredibly compute-demanding model. Instead of running it on the same training set we used in GLM, we will run it on a much smaller subset of 10% of the data.
 
 ```{r SVM TestTrain}
 set.seed(777)
-train_pct = .05
+train_pct = .1
 split <- sample(c(TRUE, FALSE), nrow(cdata), replace=TRUE, prob=c(train_pct,(1-train_pct)))
 
 cdTrain <- cdata[split,]
@@ -119,7 +136,7 @@ CM= table(cdTest[,26] , svm_P)
 print(CM)
 err_metric(CM)
 ```
-We see here an extremely similar result to our GLM model. Our accuracy, specificity, and precision are a little better in spite of us using a much smaller sample of the data! But our recall again is nearly useless. We categorize negatives just fine but almost can't identify positives at all.
+Immediately, something is very, very, very wrong here. We have not classified a single positive value. I actually went back and added an if/else statement to the error metrics to make this work, as the Confusion Matrix is actually a single Confusion Column.
 
 ```{r SVM ROCAUC}
 library(pROC)
