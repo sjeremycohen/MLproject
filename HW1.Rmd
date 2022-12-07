@@ -75,10 +75,10 @@ err_metric=function(CM)
 Next let’s build our model, confusion matrix, and get the error stats
 ```{r GLM}
 logit_m =glm(FELONY ~ . ,data =cdTrain ,family='binomial')
-# 26 is the index of FELONY column
-logit_P = predict(logit_m , newdata = cdTest[-26] ,type = 'response' ) 
+# 124 is the index of FELONY column
+logit_P = predict(logit_m , newdata = cdTest[-124] ,type = 'response' ) 
 logit_P <- ifelse(logit_P > 0.5,1,0) # Probability check
-CM= table(cdTest[,26] , logit_P)
+CM= table(cdTest[,124] , logit_P)
 print(CM)
 err_metric(CM)
 ```
@@ -113,9 +113,9 @@ We'll be able to reuse our `err_metric()` function from GLM here, as the data is
 ```{r SVM}
 library(e1071)
 svm_m = svm(FELONY ~ . ,data =cdTrain ,probability=TRUE, kernel = "linear")
-svm_P = predict(svm_m , newdata = cdTest[-26] ,type = 'response' )
+svm_P = predict(svm_m , newdata = cdTest[-124] ,type = 'response' )
 svm_P <- ifelse(svm_P > 0.5,1,0) # Probability check
-CM= table(cdTest[,26] , svm_P)
+CM= table(cdTest[,124] , svm_P)
 print(CM)
 err_metric(CM)
 ```
@@ -128,6 +128,44 @@ plot(roc_score ,main ="ROC curve -- Logistic Regression ")
 print(roc_score$auc)
 ```
 Almost diagonal. Another useless model. Maybe KNN will be more useful!
+
+## Decision Tree
+```{r DT Split}
+set.seed(777)
+train_pct = .7
+split <- sample(c(TRUE, FALSE), nrow(cdata), replace=TRUE, prob=c(train_pct,(1-train_pct)))
+
+cdTrain <- cdata[split,]
+cdTest <- cdata[!split,]
+nrow(cdTrain)
+nrow(cdTest)
+```
+
+```{r DT}
+library(rpart)
+
+rpart_m =rpart(FELONY ~ . ,data = cdTrain , method="class")
+# 26 is the index of FELONY column
+rpart_P = predict(rpart_m , newdata = cdTest[-124]) 
+rpart_P <- ifelse(rpart_P > 0.5,1,0) # Probability check
+CM= table(cdTest[,124] , logit_P)
+print(CM)
+err_metric(CM)
+```
+
+```{r DT Plot}
+library(rattle)
+library(rpart.plot)
+library(RColorBrewer)
+fancyRpartPlot(rpart_m)
+```
+
+```{r DT ROCAUC}
+library(pROC)
+roc_score=roc(cdTest[,13], rpart_P) #AUC score
+plot(roc_score ,main ="ROC curve -- Logistic Regression ")
+print(roc_score$auc)
+```
 
 ## KNN
 
@@ -152,9 +190,9 @@ knn_fit <- train(FELONY ~., data = cdTrain, method = "knn",
                  trControl=trctrl,
                  preProcess = c("center", "scale"),
                  tuneLength = 10)
-knn_P <- predict(knn_fit, newdata = cdTest[-26])
+knn_P <- predict(knn_fit, newdata = cdTest[-124])
 knn_P <- ifelse(knn_P > 0.5,1,0) # Probability check
-CM= table(cdTest[,26] , knn_P)
+CM= table(cdTest[,124] , knn_P)
 print(CM)
 err_metric(CM)
 ```
