@@ -74,12 +74,12 @@ err_metric=function(CM)
 
 Next let’s build our model, confusion matrix, and get the error stats
 ```{r GLM}
-logit_m =glm(FELONY ~ . ,data =cdTrain ,family='binomial')
+glm_m =glm(FELONY ~ . ,data =cdTrain ,family='binomial')
 # 124 is the index of FELONY column
-logit_P = predict(logit_m , newdata = cdTest[-124] ,type = 'response' ) 
-logit_P <- ifelse(logit_P > 0.5,1,0) # Probability check
-CM= table(cdTest[,124] , logit_P)
-print(CM)
+glm_P = predict(glm_m , newdata = cdTest,type = 'response' ) 
+glm_P <- ifelse(glm_P > 0.5,1,0) # Probability check
+glm_CM= table(cdTest$FELONY , glm_P)
+print(glm_CM)
 err_metric(CM)
 ```
 
@@ -87,9 +87,9 @@ Our GLM model seems to do a good job categorizing true negatives as negative wit
 
 ```{r GLM ROCAUC}
 library(pROC)
-roc_score=roc(cdTest[,13], logit_P) #AUC score
-plot(roc_score ,main ="ROC curve -- Logistic Regression ")
-print(roc_score$auc)
+glm_roc_score=roc(cdTest$FELONY, glm_P) #AUC score
+plot(glm_roc_score ,main ="ROC curve -- Logistic Regression ")
+print(glm_roc_score$auc)
 ```
 
 Our ROC curve reveals that our model has almost no predictive value, almost a dead fit for the diagonal- verifying my earlier suspicion with a miserable AUC of 46%, actually underperforming a random classifier! Dreadful. On to some other models!
@@ -113,19 +113,19 @@ We'll be able to reuse our `err_metric()` function from GLM here, as the data is
 ```{r SVM}
 library(e1071)
 svm_m = svm(FELONY ~ . ,data =cdTrain ,probability=TRUE, kernel = "linear")
-svm_P = predict(svm_m , newdata = cdTest[-124] ,type = 'response' )
+svm_P = predict(svm_m , newdata = cdTest,type = 'response' )
 svm_P <- ifelse(svm_P > 0.5,1,0) # Probability check
-CM= table(cdTest[,124] , svm_P)
-print(CM)
-err_metric(CM)
+svm_CM= table(cdTest$FELONY , svm_P)
+print(svm_CM)
+err_metric(svm_CM)
 ```
 We see here an extremely similar result to our GLM model. Our accuracy, specificity, and precision are a little better in spite of us using a much smaller sample of the data! But our recall again is nearly useless. We categorize negatives just fine but almost can't identify positives at all.
 
 ```{r SVM ROCAUC}
 library(pROC)
-roc_score=roc(cdTest[,13], svm_P) #AUC score
-plot(roc_score ,main ="ROC curve -- Logistic Regression ")
-print(roc_score$auc)
+svm_roc_score=roc(cdTest$FELONY, svm_P) #AUC score
+plot(svm_roc_score ,main ="ROC curve -- Logistic Regression ")
+print(svm_roc_score$auc)
 ```
 Almost diagonal. Another useless model. Maybe KNN will be more useful!
 
@@ -148,13 +148,13 @@ nrow(cdTest)
 ```{r DT}
 library(rpart)
 
-rpart_m =rpart(FELONY ~ . ,data = cdTrain , method="class")
+rpart_m = rpart(FELONY ~ . ,data = cdTrain)
 # 26 is the index of FELONY column
-rpart_P = predict(rpart_m , newdata = cdTest[-124]) 
+rpart_P = predict(rpart_m , newdata = cdTest) 
 rpart_P <- ifelse(rpart_P > 0.5,1,0) # Probability check
-CM= table(cdTest[,124] , logit_P)
-print(CM)
-err_metric(CM)
+dt_CM= table(cdTest$FELONY , rpart_P)
+print(dt_CM)
+err_metric(dt_CM)
 ```
 
 ```{r DT Plot}
@@ -166,10 +166,11 @@ fancyRpartPlot(rpart_m)
 
 ```{r DT ROCAUC}
 library(pROC)
-roc_score=roc(cdTest[,13], rpart_P) #AUC score
-plot(roc_score ,main ="ROC curve -- Logistic Regression ")
-print(roc_score$auc)
+dt_roc_score=roc(cdTest$FELONY, rpart_P) #AUC score
+plot(dt_roc_score ,main ="ROC curve -- Logistic Regression ")
+print(dt_roc_score$auc)
 ```
+
 
 ## KNN
 
@@ -194,17 +195,18 @@ knn_fit <- train(FELONY ~., data = cdTrain, method = "knn",
                  trControl=trctrl,
                  preProcess = c("center", "scale"),
                  tuneLength = 10)
-knn_P <- predict(knn_fit, newdata = cdTest[-124])
+knn_P <- predict(knn_fit, newdata = cdTest)
 knn_P <- ifelse(knn_P > 0.5,1,0) # Probability check
-CM= table(cdTest[,124] , knn_P)
-print(CM)
-err_metric(CM)
+knn_CM= table(cdTest$FELONY , knn_P)
+print(knn_CM)
+err_metric(knn_CM)
 ```
 
 
 
 ```{r KNN ROCAUC}
 library(pROC)
-roc_score=roc(cdTest[,13], knn_P) #AUC score
-plot(roc_score ,main ="ROC curve -- Logistic Regression ")
-print(roc_score$auc)
+knn_roc_score=roc(cdTest$FELONY, knn_P) #AUC score
+plot(knn_roc_score ,main ="ROC curve -- Logistic Regression ")
+print(knn_roc_score$auc)
+```
