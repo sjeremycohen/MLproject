@@ -1,0 +1,45 @@
+---
+title: "HW2.Rmd"
+output: html_document
+date: "2022-12-08"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Loading the Data Again
+As a reminder, during EDA we compressed a field, LAW_CAT_CD, which had 3 classes of crime, FELONY, MISDEMEANOR, VIOLATION into a binary categorization called FELONY, 1 if a felony, 0 if not.This is our class field.
+
+```{r Load Data}
+cdata <- read.csv("cdata.csv")
+cdata <- subset(cdata, select = -c(X))
+length(cdata)
+```
+
+
+
+```{r RandomForest TT-Split}
+set.seed(777)
+train_pct = .3
+split <- sample(c(TRUE, FALSE), nrow(cdata), replace=TRUE, prob=c(train_pct,(1-train_pct)))
+
+cdTrain <- cdata[split,]
+cdTest <- cdata[!split,]
+nrow(cdTrain)
+nrow(cdTest)
+```
+```{r RandomForest}
+library(randomForest)
+
+# Run RandomForest on the CDTrain dataset
+rf_m <- randomForest(FELONY ~ ., data = cdTrain)
+rf_p <- predict(rf_m, newdata = cdTest)
+rf_p <- ifelse(rf_p > 0.5,1,0) # Probability check
+CM = table(cdTest[,124] , rf_p)
+print(CM)
+err_metric(CM)
+
+# Print the model summary
+print(model)
+```

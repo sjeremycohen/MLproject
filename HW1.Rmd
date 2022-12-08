@@ -130,6 +130,10 @@ print(roc_score$auc)
 Almost diagonal. Another useless model. Maybe KNN will be more useful!
 
 ## Decision Tree
+Our dataset is not optimally set up for Decision Tree. Because our factors are already one-hot encoded, resulting in a dataset that is 129 boolean fields and 2 numerical fields. This is going to result in an extremely sparse Decision Tree. This means the model will perform quite slowly, because there will be a tremendous number of decision points.
+
+![DT Dense v OneHot](img/dt.png)
+
 ```{r DT Split}
 set.seed(777)
 train_pct = .7
