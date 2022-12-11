@@ -83,7 +83,7 @@ print(glm_CM)
 err_metric(CM)
 ```
 
-Our GLM model seems to do a good job categorizing true negatives as negative with a specificity of 96%, clearly reflected in the first row of our confusion matrix. However the Sensitivity of the model is extremely poor at only 4%. Taken together, this says to me that the GLM model is overly aggressive in classifying complaints as non-felonies. The ROC and AUC curves should validate or disprove my assumption.
+Our GLM model seems to do a good job categorizing true negatives as negative with a specificity of 96%, clearly reflected in the first row of our confusion matrix. However the Sensitivity of the model is extremely poor at only 7%. Taken together, this says to me that the GLM model is overly aggressive in classifying complaints as non-felonies. If I had time, I would go back and revise the used dataset, but we'll need to proceed with what we've got. The ROC and AUC curves should validate or disprove my assumption.
 
 ```{r GLM ROCAUC}
 library(pROC)

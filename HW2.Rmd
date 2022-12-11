@@ -43,3 +43,71 @@ err_metric(CM)
 # Print the model summary
 print(model)
 ```
+
+```{r CV TT-Split}
+set.seed(777)
+train_pct = .3
+split <- sample(c(TRUE, FALSE), nrow(cdata), replace=TRUE, prob=c(train_pct,(1-train_pct)))
+
+cdTrain <- cdata[split,]
+cdTest <- cdata[!split,]
+nrow(cdTrain)
+nrow(cdTest)
+```
+
+```{r CV}
+# Perform cross-validation using the caret package
+library(caret)
+fitControl <- trainControl(method = "cv", number = 10) # 10-fold cross-validation
+cv_m <- train(FELONY ~ ., data = cdTrain, method = "glm", trControl = fitControl)
+
+# Evaluate the model on the test set
+cv_p <- predict(cv_m, cdTest)
+cv_p <- ifelse(cv_p > 0.5,1,0) # Probability check
+CM = table(cdTest$FELONY , cv_p)
+print(CM)
+err_metric(CM)
+
+```
+```{r Bagging TT-Split}
+set.seed(777)
+train_pct = .05
+split <- sample(c(TRUE, FALSE), nrow(cdata), replace=TRUE, prob=c(train_pct,(1-train_pct)))
+
+cdTrain <- cdata[split,]
+cdTest <- cdata[!split,]
+nrow(cdTrain)
+nrow(cdTest)
+```
+
+```{r Bagging}
+library(caret)
+
+# Create bagging model
+bg_m <- train(FELONY ~ ., data = cdTrain, method = "bag")
+
+# Generate predictions on test data
+bg_p <- predict(bg_m, cdTest)
+bg_p <- ifelse(loocv_p > 0.5,1,0) # Probability check
+CM = table(cdTest$FELONY , loocv_p)
+print(CM)
+err_metric(CM)
+```
+
+```{r Boosting}
+library(caret)
+library(xgboost)
+cdmTrain <- as.matrix(cdTrain)
+cdmTest <- as.matrix(cdTest)
+
+bst_m <- xgboost(data = cdmTrain,
+                label = cdmTrain[,124],
+                nrounds = 2,
+                objective = "binary:logistic")
+
+bst_p <- predict(bst_m, cdmTest)
+bst_p <- ifelse(bst_p > 0.5,1,0) # Probability check
+CM = table(cdTest$FELONY , bst_p)
+print(CM)
+err_metric(CM)
+```
