@@ -21,7 +21,7 @@ length(cdata)
 
 ```{r RandomForest TT-Split}
 set.seed(777)
-train_pct = .3
+train_pct = .05
 split <- sample(c(TRUE, FALSE), nrow(cdata), replace=TRUE, prob=c(train_pct,(1-train_pct)))
 
 cdTrain <- cdata[split,]
