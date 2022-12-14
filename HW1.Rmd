@@ -76,19 +76,21 @@ Next let’s build our model, confusion matrix, and get the error stats
 ```{r GLM}
 glm_m =glm(FELONY ~ . ,data =cdTrain ,family='binomial')
 # 124 is the index of FELONY column
-glm_P = predict(glm_m , newdata = cdTest,type = 'response' ) 
-glm_P <- ifelse(glm_P > 0.5,1,0) # Probability check
-glm_CM= table(cdTest$FELONY , glm_P)
+glm_p = predict(glm_m , newdata = cdTest,type = 'response')
+glm_var <- paste("Variance: ", var(glm_p))
+glm_p <- ifelse(glm_p > 0.5,1,0) # Probability check
+glm_CM= table(cdTest$FELONY , glm_p)
 print(glm_CM)
 err_metric(CM)
+print(glm_var)
 ```
 
 Our GLM model seems to do a good job categorizing true negatives as negative with a specificity of 96%, clearly reflected in the first row of our confusion matrix. However the Sensitivity of the model is extremely poor at only 7%. Taken together, this says to me that the GLM model is overly aggressive in classifying complaints as non-felonies. If I had time, I would go back and revise the used dataset, but we'll need to proceed with what we've got. The ROC and AUC curves should validate or disprove my assumption.
 
 ```{r GLM ROCAUC}
 library(pROC)
-glm_roc_score=roc(cdTest$FELONY, glm_P) #AUC score
-plot(glm_roc_score ,main ="ROC curve -- Logistic Regression ")
+glm_roc_score=roc(cdTest$FELONY, glm_p) #AUC score
+plot(glm_roc_score ,main ="ROC curve -- Logistic Regression")
 print(glm_roc_score$auc)
 ```
 
@@ -112,19 +114,21 @@ nrow(cdTest)
 We'll be able to reuse our `err_metric()` function from GLM here, as the data is processed the exact same way. 
 ```{r SVM}
 library(e1071)
-svm_m = svm(FELONY ~ . ,data =cdTrain ,probability=TRUE, kernel = "linear")
-svm_P = predict(svm_m , newdata = cdTest,type = 'response' )
-svm_P <- ifelse(svm_P > 0.5,1,0) # Probability check
-svm_CM= table(cdTest$FELONY , svm_P)
+svm_m = suppressWarnings(svm(FELONY ~ . ,data =cdTrain ,probability=TRUE, kernel = "linear"))
+svm_p = predict(svm_m , newdata = cdTest,type = 'response')
+svm_var <- paste("Variance: ", var(svm_p))
+svm_p <- ifelse(svm_p > 0.5,1,0) # Probability check
+svm_CM= table(cdTest$FELONY , svm_p)
 print(svm_CM)
 err_metric(svm_CM)
+print(svm_var)
 ```
 We see here an extremely similar result to our GLM model. Our accuracy, specificity, and precision are a little better in spite of us using a much smaller sample of the data! But our recall again is nearly useless. We categorize negatives just fine but almost can't identify positives at all.
 
 ```{r SVM ROCAUC}
 library(pROC)
-svm_roc_score=roc(cdTest$FELONY, svm_P) #AUC score
-plot(svm_roc_score ,main ="ROC curve -- Logistic Regression ")
+svm_roc_score=roc(cdTest$FELONY, svm_p) #AUC score
+plot(svm_roc_score ,main ="ROC curve -- Support Vector Machine")
 print(svm_roc_score$auc)
 ```
 Almost diagonal. Another useless model. Maybe KNN will be more useful!
@@ -150,11 +154,13 @@ library(rpart)
 
 rpart_m = rpart(FELONY ~ . ,data = cdTrain)
 # 26 is the index of FELONY column
-rpart_P = predict(rpart_m , newdata = cdTest) 
-rpart_P <- ifelse(rpart_P > 0.5,1,0) # Probability check
-dt_CM= table(cdTest$FELONY , rpart_P)
+rpart_p = predict(rpart_m , newdata = cdTest)
+rpart_var <- paste("Variance: ", var(rpart_p))
+rpart_p <- ifelse(rpart_p > 0.5,1,0) # Probability check
+dt_CM= table(cdTest$FELONY , rpart_p)
 print(dt_CM)
 err_metric(dt_CM)
+print(rpart_var)
 ```
 
 ```{r DT Plot}
@@ -166,8 +172,8 @@ fancyRpartPlot(rpart_m)
 
 ```{r DT ROCAUC}
 library(pROC)
-dt_roc_score=roc(cdTest$FELONY, rpart_P) #AUC score
-plot(dt_roc_score ,main ="ROC curve -- Logistic Regression ")
+dt_roc_score=roc(cdTest$FELONY, rpart_p) #AUC score
+plot(dt_roc_score ,main ="ROC curve -- Decision Tree")
 print(dt_roc_score$auc)
 ```
 
@@ -177,7 +183,7 @@ print(dt_roc_score$auc)
 Again, given the demands of KNN, we will use a 5%/95% Train/Test Split
 
 ```{r KNN Split}
-set.seed(1)
+set.seed(777)
 train_pct = .05
 split <- sample(c(TRUE, FALSE), nrow(cdata), replace=TRUE, prob=c(train_pct,(1-train_pct)))
 
@@ -188,16 +194,30 @@ nrow(cdTest)
 ```
 
 ```{r KNN}
-set.seed(1)
+library(caret)
+knn_grid <- expand.grid(k = 4)
+knn_m <- suppressWarnings(train(FELONY ~., data = cdTrain, method = "knn",
+                 preProcess = c("center", "scale"), tuneGrid = knn_grid, distance = "euclidean"))
+knn_p <- predict(knn_m, newdata = cdTest)
+knn_var <- paste("Variance: ", var(knn_p))
+knn_p <- ifelse(knn_p > 0.5,1,0) # Probability check
+knn_CM= table(cdTest$FELONY , knn_p)
+print(knn_CM)
+err_metric(knn_CM)
+```
+
+
+```{r KNN}
 library(caret)
 trctrl <- trainControl(method = "cv", number = 10)
 knn_fit <- train(FELONY ~., data = cdTrain, method = "knn",
                  trControl=trctrl,
                  preProcess = c("center", "scale"),
                  tuneLength = 10)
-knn_P <- predict(knn_fit, newdata = cdTest)
-knn_P <- ifelse(knn_P > 0.5,1,0) # Probability check
-knn_CM= table(cdTest$FELONY , knn_P)
+knn_p <- predict(knn_fit, newdata = cdTest)
+knn_var <- paste("Variance: ", var(knn_p))
+knn_p <- ifelse(knn_p > 0.5,1,0) # Probability check
+knn_CM= table(cdTest$FELONY , knn_p)
 print(knn_CM)
 err_metric(knn_CM)
 ```
@@ -206,7 +226,7 @@ err_metric(knn_CM)
 
 ```{r KNN ROCAUC}
 library(pROC)
-knn_roc_score=roc(cdTest$FELONY, knn_P) #AUC score
-plot(knn_roc_score ,main ="ROC curve -- Logistic Regression ")
+knn_roc_score=roc(cdTest$FELONY, knn_p) #AUC score
+plot(knn_roc_score ,main ="ROC curve -- K Nearest Neighbor ")
 print(knn_roc_score$auc)
 ```

@@ -16,10 +16,32 @@ cdata <- read.csv("cdata.csv")
 cdata <- subset(cdata, select = -c(X))
 length(cdata)
 ```
+We'll use the same Error Metrics core function as we did in HW1. It will serve us just as well returning info about our ensemble methods as it did our plain classifiers.
+```{r Error Metrics}
+err_metric=function(CM)
+{
+  TN =CM[1,1]
+  TP =CM[2,2]
+  FP =CM[1,2]
+  FN =CM[2,1]
+  precision =(TP)/(TP+FP)
+  specificity_score = (TN) / (TN + FP)
+  recall_score =(FP)/(FP+TN)
+  f1_score=2*((precision*recall_score)/(precision+recall_score))
+  accuracy_model  =(TP+TN)/(TP+TN+FP+FN)
+  False_positive_rate =(FP)/(FP+TN)
+  False_negative_rate =(FN)/(FN+TP)
+  print(paste("Accuracy of the model: ",round(accuracy_model,2)))
+  print(paste("Specificity value of the model: ",round(specificity_score,2)))
+  print(paste("Precision value of the model: ",round(precision,2)))
+  print(paste("Recall/Sensitivity value of the model: ",round(recall_score,2)))
+}
+```
+
+# Random Forest
 
 
-
-```{r RandomForest TT-Split}
+```{r RF TT-Split}
 set.seed(777)
 train_pct = .05
 split <- sample(c(TRUE, FALSE), nrow(cdata), replace=TRUE, prob=c(train_pct,(1-train_pct)))
@@ -29,20 +51,27 @@ cdTest <- cdata[!split,]
 nrow(cdTrain)
 nrow(cdTest)
 ```
-```{r RandomForest}
+```{r RF}
 library(randomForest)
 
 # Run RandomForest on the CDTrain dataset
-rf_m <- randomForest(FELONY ~ ., data = cdTrain)
+rf_m <- suppressWarnings(randomForest(FELONY ~ ., data = cdTrain, ntree = 5))
 rf_p <- predict(rf_m, newdata = cdTest)
+rf_var <- paste("Variance: ", var(rf_p))
 rf_p <- ifelse(rf_p > 0.5,1,0) # Probability check
 CM = table(cdTest[,124] , rf_p)
 print(CM)
 err_metric(CM)
-
-# Print the model summary
-print(model)
+print(rf_var)
 ```
+```{r RF ROCAUC}
+library(pROC)
+rf_roc_score=roc(cdTest$FELONY, rf_p) #AUC score
+plot(rf_roc_score ,main ="ROC curve -- LOOCV ")
+print(rf_roc_score$auc)
+```
+
+# Cross Validation
 
 ```{r CV TT-Split}
 set.seed(777)
@@ -59,19 +88,31 @@ nrow(cdTest)
 # Perform cross-validation using the caret package
 library(caret)
 fitControl <- trainControl(method = "cv", number = 10) # 10-fold cross-validation
-cv_m <- train(FELONY ~ ., data = cdTrain, method = "glm", trControl = fitControl)
+cv_m <- suppressWarnings(train(FELONY ~ ., data = cdTrain, method = "glm", trControl = fitControl))
 
 # Evaluate the model on the test set
 cv_p <- predict(cv_m, cdTest)
+cv_var <- paste("Variance: ", var(cv_p))
 cv_p <- ifelse(cv_p > 0.5,1,0) # Probability check
 CM = table(cdTest$FELONY , cv_p)
 print(CM)
 err_metric(CM)
-
+print(cv_var)
 ```
-```{r Bagging TT-Split}
+
+```{r CV ROCAUC}
+library(pROC)
+cv_roc_score=roc(cdTest$FELONY, cv_p) #AUC score
+plot(cv_roc_score ,main ="ROC curve -- Cross Validation ")
+print(cv_roc_score$auc)
+```
+# Leave-One-Out Cross Validation (LOOCV)
+Next we'll run Leave One Out Cross-Validation (LOOCV) using GLM as our base model.
+Because LOOCV has to run n times, where n is the length of the dataset, we'll be running this on an extremely small sample of our data, only 1%. This will still take some time to run.
+
+```{r LOOCV TT-Split}
 set.seed(777)
-train_pct = .05
+train_pct = .01
 split <- sample(c(TRUE, FALSE), nrow(cdata), replace=TRUE, prob=c(train_pct,(1-train_pct)))
 
 cdTrain <- cdata[split,]
@@ -80,34 +121,24 @@ nrow(cdTrain)
 nrow(cdTest)
 ```
 
-```{r Bagging}
+```{r LOOCV}
+# Perform cross-validation using the caret package
 library(caret)
+fitControl <- trainControl(method = "LOOCV")
+loocv_m <- suppressWarnings(train(FELONY ~ ., data = cdTrain, method = "glm", trControl = fitControl))
 
-# Create bagging model
-bg_m <- train(FELONY ~ ., data = cdTrain, method = "bag")
-
-# Generate predictions on test data
-bg_p <- predict(bg_m, cdTest)
-bg_p <- ifelse(loocv_p > 0.5,1,0) # Probability check
-CM = table(cdTest$FELONY , loocv_p)
-print(CM)
-err_metric(CM)
+# Evaluate the model on the test set
+loocv_p <- predict(loocv_m, cdTest)
+loocv_var <- paste("Variance: ", var(loocv_p))
+loocv_p <- ifelse(loocv_p > 0.5,1,0) # Probability check
+loocv_CM = table(cdTest$FELONY , loocv_p)
+print(loocv_CM)
+err_metric(loocv_CM)
+print(loocv_var)
 ```
-
-```{r Boosting}
-library(caret)
-library(xgboost)
-cdmTrain <- as.matrix(cdTrain)
-cdmTest <- as.matrix(cdTest)
-
-bst_m <- xgboost(data = cdmTrain,
-                label = cdmTrain[,124],
-                nrounds = 2,
-                objective = "binary:logistic")
-
-bst_p <- predict(bst_m, cdmTest)
-bst_p <- ifelse(bst_p > 0.5,1,0) # Probability check
-CM = table(cdTest$FELONY , bst_p)
-print(CM)
-err_metric(CM)
+```{r LOOCV ROCAUC}
+library(pROC)
+loocv_roc_score=roc(cdTest$FELONY, loocv_p) #AUC score
+plot(loocv_roc_score ,main ="ROC curve -- LOOCV ")
+print(loocv_roc_score$auc)
 ```
